@@ -2,6 +2,8 @@
 
 > 适用于 **Claude Code** 的 Python CLI 项目规范模板，包含 AI 行为规则、自动化质量门禁（Hooks）和操作流程指南（Skills）。
 > 设计目标：**让 AI 在无人监督的情况下也能写出符合工程规范的代码。**
+>
+> 本项目为个人研究成果，借鉴了 [claude-rules](https://github.com/anthropics/claude-rules)、众多开源项目的 CI/Hooks 设计思路以及 Claude Code 社区的实践经验。
 
 ---
 
@@ -599,6 +601,4 @@ Auto Gate 对 pytest 有 60 秒硬超时。如果测试太慢，考虑：
 
 ---
 
-## 许可
-
-本仓库仅包含规范模板文件，无运行时依赖。源自 [claude-rules](https://github.com/anthropics/claude-rules) 项目。
+本仓库仅包含规范模板文件，无运行时依赖，供 **2026 数智实训营** 使用。
