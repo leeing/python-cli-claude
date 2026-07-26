@@ -1,0 +1,8 @@
+# Override global gitignore for teaching template files
+!.claude/
+!CLAUDE.md
+!AGENTS.md
+
+# Python cache
+__pycache__/
+*.pyc
