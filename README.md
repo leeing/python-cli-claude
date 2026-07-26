@@ -7,6 +7,7 @@
 
 ## 目录
 
+- [为什么用这套模板？](#为什么用这套模板)
 - [快速安装](#快速安装)
 - [仓库结构](#仓库结构)
 - [设计原理](#设计原理)
@@ -19,6 +20,41 @@
 - [Skills 参考](#skills-参考)
 - [使用示例](#使用示例)
 - [常见问题](#常见问题)
+
+---
+
+## 为什么用这套模板？
+
+本模板**强制推行现代 Python 技术栈**。部署这套 hooks 和规范后，你的项目会自然使用目前业界最新的工具链：
+
+### 工具链对比：传统 vs 现代
+
+| 环节 | 传统方案 ❌ | 本模板方案 ✅ | 为什么更好 |
+|------|-----------|-------------|-----------|
+| **包管理** | `pip` + `venv` + `requirements.txt` | **uv** + `pyproject.toml` | 单一工具管理 Python 版本、虚拟环境、依赖锁定，速度比 pip 快 10-100 倍 |
+| **格式化** | Black / autopep8 | **Ruff** (format) | 用 Rust 写的 Python linter+formatter，速度比 Black 快 30 倍以上 |
+| **Lint** | flake8 / isort / pylint | **Ruff** (check) | 一个工具替代 flake8 + isort + 数十个插件，配置集中在 pyproject.toml |
+| **类型检查** | 裸写 Python / 偶尔用 mypy | **Mypy** (`strict = true`) | strict 模式强制完整类型标注，编译期发现类型错误 |
+| **测试** | unittest / nose | **pytest** | 现代 Python 测试的事实标准，更简洁的断言和 fixture 系统 |
+| **日志** | `print()` / `logging` + f-string | **structlog** | 结构化日志，输出 JSON 格式，天然适配 ELK / Datadog 等采集系统 |
+| **配置管理** | `os.environ` 散落各处 | **pydantic-settings** | 类型安全的配置加载，自动校验环境变量，IDE 友好 |
+| **HTTP 请求** | `requests` (同步阻塞) | **httpx** (async) | 原生 async/await 支持，不阻塞事件循环 |
+| **类型标注** | `Optional[str]`, `List[dict]` | `str \| None`, `list[dict]` | Python 3.10+ 原生语法，更简洁，不需要从 typing 导入 |
+| **路径操作** | `os.path.join(...)` | `pathlib.Path` | 面向对象的路径 API，`/` 操作符拼接，跨平台自动适配 |
+
+### 几个关键原则
+
+**1. 只保留最好的一个。** Python 生态圈常常有多个方案并存（pipenv vs poetry vs uv、Black vs Ruff vs flake8）。本模板在同类工具中只选择当前最优解，避免选择困难。
+
+**2. 工具之间互相配合。** 例如：
+- `uv` 的 `[dependency-groups]` 定义 dev 依赖（ruff、mypy、pytest、structlog）
+- `pyproject.toml` 的 `[tool.ruff]` / `[tool.mypy]` / `[tool.pytest.ini_options]` 集中管理所有工具配置
+- `check-constraints.py` 在每次写文件时检查是否违反了工具链规范
+- `auto-gate.py` 在任务结束时自动运行 ruff + mypy + pytest
+
+**3. 新项目零配置。** 本模板的检查机制（`check-scaffold.py`）会强制项目包含 `pyproject.toml`，并且提供了完整的模板。学生创建新项目时，Hook 会直接把包含所有工具配置的 `pyproject.toml` 模板输出到终端，复制粘贴即可起步。
+
+**4. Hook 自动推行规范。** 学生不需要记住"用 pathlib 不要用 os.path"——只要代码中出现了 `os.path.join()`，Hook 就会拦截并告诉他改用 `pathlib`。规则通过自动化强制执行，而不是靠记忆和自觉。
 
 ---
 
