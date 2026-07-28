@@ -1,0 +1,44 @@
+[project]
+name = "python-cli-claude"
+version = "0.1.0"
+description = "Python CLI 项目的 Claude Code 规范模板"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8.4.0,<9", "ruff>=0.9.0,<1", "mypy>=1.18.0,<2"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "B", "UP", "N", "S", "SIM", "T20",
+    "PLR", "PLW", "TRY", "G",
+    "ARG", "C4", "C90", "EM", "FBT", "DTZ", "PERF", "ISC", "SLOT",
+]
+unfixable = ["S307", "S609", "S301", "S302", "S105", "S106", "S107"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S108", "PLR2004", "ARG001", "S603"]
+"**/__init__.py" = ["F401"]
+"project/**/hooks/*.py" = ["C901", "PLR0912", "PLR0915", "S603", "S607", "T201", "ISC004"]
+"global/**/hooks/*.py" = ["C901", "PLR0912", "PLR0915", "S603", "S607", "T201"]
+"init.py" = ["C901", "PLR0912", "PLR0915"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"

@@ -11,8 +11,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 HOOK_TOOL_DIRS = {".claude", ".codex", ".opencode"}
-AUTO_GATE_STATE_DIR = ".auto-gate-state"
-AUTO_GATE_PENDING_FILE = "pending"
 
 
 def find_project_root() -> Path:
@@ -51,31 +49,9 @@ def hook_log(event: str, hook_name: str, detail: str = "") -> None:
 
 
 def is_installed_hook_file(path: Path) -> bool:
-    """Return True when a file path is inside a generated hook directory."""
-    return "hooks" in path.parts and any(tool_dir in path.parts for tool_dir in HOOK_TOOL_DIRS)
-
-
-def _auto_gate_marker(project_root: Path | None = None) -> Path:
-    root = find_project_root() if project_root is None else project_root
-    return root / current_tool_dir() / "hooks" / AUTO_GATE_STATE_DIR / AUTO_GATE_PENDING_FILE
-
-
-def mark_auto_gate_activity(project_root: Path | None = None) -> None:
-    """Record that a write-like tool ran and Stop auto-gate should check the project."""
-    marker = _auto_gate_marker(project_root)
-    with contextlib.suppress(OSError):
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text("1\n", encoding="utf-8")
-
-
-def consume_auto_gate_activity(project_root: Path | None = None) -> bool:
-    """Return and clear whether a write-like tool ran since the previous Stop hook."""
-    marker = _auto_gate_marker(project_root)
-    if not marker.is_file():
-        return False
-    with contextlib.suppress(OSError):
-        marker.unlink()
-    return True
+    """Return True when a file path is directly inside a generated hook directory."""
+    parent = path.parent
+    return parent.name == "hooks" and parent.parent.name in HOOK_TOOL_DIRS
 
 
 def changed_py_files() -> list[str]:
@@ -158,26 +134,6 @@ def check_assert_usage(file_path: Path) -> list[str]:
         return [
             "❌ assert statement in non-test code. "
             "Use explicit validation (raise ValueError etc.) instead:\n" + "\n".join(hits)
-        ]
-    return []
-
-
-def check_sql_concatenation(file_path: Path) -> list[str]:
-    """Detect f-string / string concatenation in SQL queries in non-test .py files."""
-    if _is_test_file(file_path):
-        return []
-    sql_keywords = r"SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER"
-    hits: list[str] = []
-    for i, line in enumerate(file_path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
-        stripped = line.strip()[:120]
-        if re.search(rf'f["\'].*({sql_keywords})\b', line, re.IGNORECASE) or re.search(
-            rf'["\'].*({sql_keywords})\b.*["\']\s*\+', line, re.IGNORECASE
-        ):
-            hits.append(f"  {i}:{stripped}")
-    if hits:
-        return [
-            "❌ SQL string concatenation / f-string detected. "
-            "Use parameterized queries or ORM methods:\n" + "\n".join(hits)
         ]
     return []
 

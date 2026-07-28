@@ -6,12 +6,11 @@ Triggered when a .py file is written. Ensures required project files exist.
 Exit 2 = block (agent is instructed to create missing files), exit 0 = pass.
 """
 
-import contextlib
 import json
-import os
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
+
+from _hook_utils import hook_log
 
 PYPROJECT_TEMPLATE = """\
 [project]
@@ -53,21 +52,6 @@ warn_return_any = true
 testpaths = ["tests"]
 addopts = "-v --tb=short"
 """
-
-
-def hook_log(event: str, hook_name: str, detail: str = "") -> None:
-    log_dir_env = (
-        os.environ.get("CLAUDE_PROJECT_DIR")
-        or os.environ.get("CODEX_PROJECT_DIR")
-        or os.environ.get("OPENCODE_PROJECT_DIR", ".")
-    )
-    script_parts = Path(__file__).resolve().parts
-    tool_dir = ".codex" if ".codex" in script_parts else ".opencode" if ".opencode" in script_parts else ".claude"
-    log_dir = Path(log_dir_env) / tool_dir / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
-    with contextlib.suppress(OSError):
-        (log_dir / "hooks.log").open("a").write(f"{ts} | {event:<12} | {hook_name:<25} | {detail}\n")
 
 
 def main() -> None:

@@ -22,7 +22,7 @@ def main() -> None:
         print("✅ Auto Gate: no Python files changed, skipping.")
         sys.exit(0)
 
-    src_files = [f for f in py_files if f.startswith("src/")]
+    src_files = [f for f in py_files if Path(f).parts[0] == "src"]
     print(f"--- Auto Gate: checking {len(py_files)} changed file(s) ---", flush=True)
 
     # Build check tasks to run in parallel
@@ -53,9 +53,9 @@ def main() -> None:
     if Path("tests").is_dir():
         test_targets: list[str] = []
         for f in py_files:
-            if f.startswith("tests/"):
+            if Path(f).parts[0] == "tests":
                 test_targets.append(f)
-            elif f.startswith("src/"):
+            elif Path(f).parts[0] == "src":
                 # src/pkg/foo.py → tests/test_foo.py
                 stem = Path(f).stem
                 candidate = Path("tests") / f"test_{stem}.py"

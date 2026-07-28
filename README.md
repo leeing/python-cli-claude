@@ -2,14 +2,29 @@
 
 > 适用于 **Claude Code** 的 Python CLI 项目规范模板，包含 AI 行为规则、自动化质量门禁（Hooks）和操作流程指南（Skills）。
 > 设计目标：**让 AI 在无人监督的情况下也能写出符合工程规范的代码。**
-> for 2026华工暑期数智实训营
->
-> 本项目为个人研究成果，借鉴了众多开源项目的 CI/Hooks 设计思路以及 Claude Code 社区的实践经验。但是本项目中的文件，仅在 Mac OS 中测试过，不代表在 Windows/Linux 可以直接使用。
+
+## 项目由来
+
+本项目是从 claude-rules (一套支持 7 种技术栈、3 种 AI 工具的通用规范模板系统，私有项目）中**裁剪、简化而来**，专门为 **华南理工大学 2026 数智实训营** 准备。
+
+相比于源项目 `claude-rules`，本项目做了以下裁剪：
+
+| 维度 | `claude-rules`（源） | 本模板 |
+|------|---------------------|--------|
+| 技术栈 | 7 种（fastapi-react, python-fastapi, python-cli, python-stdlib, ts-cli, ts-cf-worker, chat） | **1 种**：python-cli |
+| AI 工具 | Claude Code + Codex CLI + OpenCode | **仅 Claude Code** |
+| 安装方式 | `python init.py <template> <target> --tools claude,codex,...` 命令行 | **`python init.py <target>`** 一键完成 |
+| 数据库支持 | `--db mysql\|postgresql` 条件块处理 | 不需要 |
+| CI 模板 | 5 个 GitHub Actions workflow | 不包含 |
+| Dead Code | 包含 multi-tool 兼容层、DB 检查函数、marker 机制等残留 | **已清理** |
+
+裁剪后，学生只需要关注一个核心问题：**如何通过 CLAUDE.md + Hooks + Skills 三层架构让 AI 写出合格代码**，不被多模板、多工具的复杂度干扰。
 
 ---
 
 ## 目录
 
+- [项目由来](#项目由来)
 - [为什么用这套模板？](#为什么用这套模板)
 - [快速安装](#快速安装)
 - [仓库结构](#仓库结构)
@@ -19,8 +34,10 @@
   - [Skills —— AI 的操作手册](#skills--ai-的操作手册)
   - [Hooks —— 自动化质量门禁](#hooks--自动化质量门禁)
   - [Auto Gate 详解](#auto-gate-详解)
+  - [Hook 内部机制深度解析](#hook-内部机制深度解析)
 - [Hooks 参考](#hooks-参考)
 - [Skills 参考](#skills-参考)
+- [兼容性优化](#兼容性优化)
 - [使用示例](#使用示例)
 - [常见问题](#常见问题)
 
@@ -72,18 +89,30 @@
 ### 第一步：克隆本仓库
 
 ```bash
-git clone git@github.com:leeing/python-cli-claude.git && cd python-cli-claude
+git clone https://github.com/leeing/python-cli-claude.git && cd python-cli-claude
 ```
 
-### 第二步：项目级配置 → 复制到你的项目根目录
+### 第二步：用 `init.py` 初始化项目
 
 ```bash
-# 假设你的项目在 ~/my-cli-app
-cp project/CLAUDE.md ~/my-cli-app/
-cp -r project/.claude ~/my-cli-app/
+# 在你的项目目录下执行（会自动创建目标目录）
+python init.py ~/my-cli-app
 ```
 
-> `.claude/settings.json` 会启用项目级 hooks。如果你已有同名文件，请手动合并 hooks 配置块，不要直接覆盖。
+一条命令完成以下所有操作：
+- 复制 `CLAUDE.md` 到项目根目录
+- 复制 `.claude/skills/`（5 个标准化工序）
+- 复制 `.claude/hooks/`（3 个质量门禁脚本）+ 合并 `settings.json`
+
+```bash
+# 预览模式 —— 只看会生成什么，不实际写入
+python init.py ~/my-cli-app --dry-run
+
+# 跳过 hooks —— 只装 CLAUDE.md + skills
+python init.py ~/my-cli-app --no-hooks
+```
+
+`init.py` 支持覆盖确认：如果目标目录已有同名文件，会提示 `[y/N]` 选择是否覆盖。
 
 ### 第三步：全局级配置 → 复制到 `~/.claude/`
 
@@ -97,33 +126,9 @@ cp global/hooks/*.py ~/.claude/hooks/
 
 # Skills
 cp -r global/skills/hooks-setup ~/.claude/skills/
-
-# ⚠️ settings.json 需手动合并，不能直接覆盖
-# 方法一：用 Python 脚本合并（推荐）
-python3 -c "
-import json, os
-settings_path = os.path.expanduser('~/.claude/settings.json')
-with open(settings_path) as f:
-    settings = json.load(f)
-with open('global/settings.json') as f:
-    hooks = json.load(f)
-existing_hooks = settings.get('hooks', {})
-for event_name, new_matchers in hooks.get('hooks', {}).items():
-    existing_hooks.setdefault(event_name, [])
-    existing_patterns = {m.get('matcher') for m in existing_hooks[event_name]}
-    for matcher in new_matchers:
-        if matcher.get('matcher') not in existing_patterns:
-            existing_hooks[event_name].append(matcher)
-settings['hooks'] = existing_hooks
-with open(settings_path, 'w') as f:
-    json.dump(settings, f, indent=2)
-    f.write('\n')
-print('✅ Global hooks merged into ~/.claude/settings.json')
-"
-
-# 方法二：手工合并 —— 打开 global/settings.json，
-# 将其 hooks 对象复制到 ~/.claude/settings.json 的 hooks 字段中
 ```
+
+全局 hooks 配置合并见 [FAQ](#常见问题)。
 
 ---
 
@@ -489,6 +494,172 @@ AI: "export 命令已完成，所有检查通过。"
 
 ---
 
+### Hook 内部机制深度解析
+
+虽然表面上只是"自动运行了几个命令"，但要理解这个系统为什么可靠，需要深入三个层次。
+
+#### 第一层：Hook 的 stdin/stdout/stderr 协议
+
+Claude Code 调用 hook 时遵循一个严格的 JSON 协议：
+
+```
+Claude Code                    Hook 脚本
+    │                              │
+    │  ── stdin (JSON) ──→         │  阅读 tool_name, tool_input, cwd
+    │                              │
+    │  ←── stdout ────             │  正常输出（显示给用户）
+    │  ←── stderr ────             │  ★ 错误/指令（显示给 AI agent 看）
+    │  ←── exit code ──            │  0=通过, 1=警告, 2=拦截
+```
+
+**关键设计：stderr 是给 AI 看的 "修复指令通道"。** 当 `exit 2` 时，stderr 的内容不仅仅是报错，还包含了分步修复指令：
+
+```python
+# auto-gate.py 第 89-94 行
+print("=== INSTRUCTIONS FOR AI AGENT ===", file=sys.stderr)
+print("DO NOT STOP. You MUST fix the errors above and try again.", file=sys.stderr)
+print("Step 1: Read each ❌ error message above carefully.", file=sys.stderr)
+print("Step 2: Fix the code that caused each failure.", file=sys.stderr)
+print("Step 3: After fixing, the gate will re-run automatically.", file=sys.stderr)
+```
+
+这些文字不会被用户看到（用户看到的是 stdout），但会被 Claude Code 自动注入到 AI 的下一个系统提示词中。**这其实是利用了 Claude Code 的 Hook 机制来对 AI 进行 "二次编程"——AI 看到 stderr 中的指令后，会像读代码注释一样逐条执行。**
+
+#### 第二层：PreToolUse → PostToolUse → Stop 的时序
+
+三个事件的触发时机决定了整个自修复循环的骨架：
+
+```
+┌─ PreToolUse ───────────────────────────────────────────┐
+│ AI 说 "我要写文件"                                       │
+│   → 全局 hooks 先检查：是否危险命令？有硬编码密码？          │
+│   → exit 2 = "不准写"，AI 拿不到文件写入结果               │
+│   → exit 0 = 放行，进入下一步                             │
+└───────────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─ 工具执行 ─────────────────────────────────────────────┐
+│ Write / Edit 工具实际写入文件到磁盘                       │
+└───────────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─ PostToolUse ──────────────────────────────────────────┐
+│ AI 拿到了 "写入成功" 的结果                               │
+│   → 项目 hooks 检查：用了 os.path？有 print()？           │
+│   → exit 2 = 阻止这个结果返回给 AI                       │
+│     ★ AI 会看到 stderr 中的违规详情 + 修复建议             │
+│     ★ AI 接下来会自己修复代码，重新 Write，形成循环         │
+│   → exit 0 = 没问题，AI 继续                              │
+└───────────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─ AI 继续工作 ... ──────────────────────────────────────┐
+│ （可能还有多轮 PreToolUse → PostToolUse）                 │
+└───────────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─ Stop ────────────────────────────────────────────────┐
+│ AI 说 "我做完了"，Agent 准备停止                         │
+│   → auto-gate.py 启动                                   │
+│   → ruff format --check + ruff check + mypy + pytest    │
+│   → exit 2 = "没过关，不算完"，AI 读 stderr 修复         │
+│   → exit 0 = "全部通过，任务完成"                        │
+│                                                        │
+│ ★ 这是最后一道防线：就算 PostToolUse 漏了某个问题，       │
+│   Auto Gate 的完整检查也会兜底。                          │
+└───────────────────────────────────────────────────────┘
+```
+
+#### 第三层：为什么 3 轮是合理上限
+
+CLAUDE.md 规定最多 3 轮自修复，这不是随便定的数字：
+
+1. **第 1 轮**：覆盖粗心错误——删除未使用的 import、修复格式问题。90% 的问题在这一轮解决。
+2. **第 2 轮**：覆盖连锁问题——第 1 轮修复后可能暴露新的类型不匹配。剩余 9% 的问题解决。
+3. **第 3 轮**：最后兜底。如果到这还不过，说明问题不是 AI 能自己解决的（例如两个 lint 规则在特定场景下互斥）。
+4. **超过 3 轮 → 报告用户**：防止无限循环。AI 不会疯狂重试耗光 token，而是把剩余问题列出，让人来做决策。
+
+实际案例中，超过 3 轮的典型场景：
+- `mypy strict=True` 要求完整类型标注，但某个第三方库没有 stubs
+- 两个 Ruff 规则相互冲突，修了这个触发那个
+- 项目本身的 pyproject.toml 配置有误导致无法通过
+
+---
+
+### `check-constraints.py` 的工作机制
+
+这个 hook 是 PostToolUse 阶段的**微观质量检查**。它的 11 项检查不需要运行任何外部工具——纯正则扫描文件内容：
+
+| 检查类别 | 检测模式 | 禁止原因 |
+|---------|---------|---------|
+| `type: ignore` 累积 | 计数 `# type: ignore` > 3 | 类型逃逸不应成为常态 |
+| 安全 noqa 豁免 | `# noqa: S307\|S609\|...` | 安全规则不可豁免 |
+| `os.path` | `os.path.join()` 等 | 使用 pathlib 替代 |
+| `os.environ` | `os.environ['X']` 等 | 使用 pydantic-settings |
+| `print()` | 任何 `print(` | 使用 structlog |
+| 文件行数 | > 1000 行 | 应拆分模块 |
+| `time.sleep` | `time.sleep(...)` | async 用 asyncio.sleep |
+| `requests` | `import requests` | 使用 httpx + async |
+| 泛型异常 | `except Exception\|BaseException\|:` | 捕获具体类型 |
+| 旧式类型标注 | `Optional[...]` 等 | 使用 `X \| None` |
+| `assert` 语句 | `assert ...`（非测试） | 使用显式 raise |
+
+**一个值得注意的细节**：`check-constraints.py` 会逐文件检查，但跳过测试文件（`test_*.py`、`conftest.py`）和 hook 脚本自身——否则 hook 脚本里的 `print(stderr)` 会被它自己拦截，造成死循环。
+
+#### Hook 脚本间的关系
+
+```
+_hook_utils.py            ← 共享基础设施（全部导入自此处）
+├── hook_log()             ← 日志记录（被 auto-gate、check-constraints 调用）
+├── is_installed_hook_file() ← 豁免 hook 自身不被检查
+├── changed_py_files()     ← git diff 获取变更文件
+├── run_capture()          ← 子进程封装
+├── check_bare_exception() / check_legacy_type_hints() /
+│   check_assert_usage() / check_time_sleep() /
+│   check_requests_usage() ← 共享约束检查函数
+│
+check-constraints.py       ← 导入上面的共享函数，加上本地的
+│                            check_type_ignores / check_security_noqa /
+│                            check_ospath / check_environ_pattern /
+│                            check_file_size / check_print_usage
+│
+check-scaffold.py          ← 导入 hook_log，检查项目脚手架完整性
+│
+auto-gate.py               ← 导入 changed_py_files + hook_log + run_capture
+                             Stop 时并行运行 ruff + mypy + pytest
+```
+
+---
+
+## 兼容性优化
+
+本模板从 `claude-rules` 裁剪后，针对实际教学场景做了以下优化：
+
+### Windows / Linux / macOS 三平台兼容
+
+| 优化项 | 修改文件 | 说明 |
+|--------|---------|------|
+| `chmod 0o755` 跨平台保护 | `init.py` | 对 `NotImplementedError` / `OSError` 做静默抑制，Windows 上不崩溃 |
+| 路径前缀匹配 | `auto-gate.py` | `f.startswith("src/")` → `Path(f).parts[0] == "src"`，兼容 Windows 反斜杠路径 |
+| 全部使用 `pathlib.Path` | 全局 | 项目内所有 Python 脚本均使用 `pathlib`，天然跨平台 |
+
+### 死代码清理
+
+从源项目 `claude-rules` 的多工具架构中清理了以下残留：
+
+| 删除项 | 位置 | 原用途 |
+|--------|------|--------|
+| `mark_auto_gate_activity()` / `consume_auto_gate_activity()` | `_hook_utils.py` | 源项目的 session 级 dirty flag 机制，本模板中无人调用 |
+| `check_sql_concatenation()` | `_hook_utils.py` | 数据库 SQL 注入检测，python-cli 不需要 |
+| `AUTO_GATE_STATE_DIR` / `AUTO_GATE_PENDING_FILE` | `_hook_utils.py` | 配合 marker 函数的文件路径，同属死代码 |
+| `check-scaffold.py` 的重复 `hook_log()` | `check-scaffold.py` | 改为从 `_hook_utils` 导入 |
+
+### 关键 Bug 修复
+
+- **`is_installed_hook_file()` 误判修复**：原实现 `"hooks" in path.parts` 会把任意包含 "hooks" 字符串的路径（如 `/home/user/hooks-project/src/main.py`）错误识别为 hook 自身，从而跳过所有 constraint 检查。已改为精确匹配父目录链。
+
+---
+
 ## Hooks 参考
 
 ### 项目级 Hooks
@@ -560,9 +731,59 @@ Claude 会：
 3. 每次写文件后 hooks 自动检查代码规范
 4. 任务完成时 Auto Gate 强制运行 ruff + mypy + pytest，不通过不算完成
 
+### 初始化新项目
+
+```bash
+# 基本用法
+python init.py ~/my-new-cli
+
+# 预览
+python init.py ~/my-new-cli --dry-run
+
+# 不装 hooks（只装 CLAUDE.md + skills）
+python init.py ~/my-new-cli --no-hooks
+```
+
 ---
 
 ## 常见问题
+
+### Q: 如何使用 `init.py` 初始化项目？
+
+```bash
+python init.py <目标目录>              # 完整安装
+python init.py <目标目录> --dry-run    # 预览
+python init.py <目标目录> --no-hooks   # 跳过 hooks
+python init.py --help                 # 查看所有选项
+```
+
+目标目录不存在时会自动创建；已存在的文件会逐一提示是否覆盖。
+
+### Q: 如何合并全局 settings.json？
+
+```bash
+python3 -c "
+import json
+from pathlib import Path
+settings_path = Path.home() / '.claude/settings.json'
+with open(settings_path) as f:
+    settings = json.load(f)
+with open('global/settings.json') as f:
+    hooks = json.load(f)
+existing_hooks = settings.get('hooks', {})
+for event_name, new_matchers in hooks.get('hooks', {}).items():
+    existing_hooks.setdefault(event_name, [])
+    existing_patterns = {m.get('matcher') for m in existing_hooks[event_name]}
+    for matcher in new_matchers:
+        if matcher.get('matcher') not in existing_patterns:
+            existing_hooks[event_name].append(matcher)
+settings['hooks'] = existing_hooks
+with open(settings_path, 'w') as f:
+    json.dump(settings, f, indent=2)
+    f.write('\n')
+print('✅ Global hooks merged')
+"
+```
 
 ### Q: 如何禁用某个 hook？
 
