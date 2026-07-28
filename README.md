@@ -3,7 +3,7 @@
 > 适用于 **Claude Code** 的 Python CLI 项目规范模板，包含 AI 行为规则、自动化质量门禁（Hooks）和操作流程指南（Skills）。
 > 设计目标：**让 AI 在无人监督的情况下也能写出符合工程规范的代码。**
 >
-> 本项目为个人研究成果，借鉴了众多开源项目的 CI/Hooks 设计思路以及 Claude Code 社区的实践经验。
+> 本项目为个人研究成果，借鉴了众多开源项目的 CI/Hooks 设计思路以及 Claude Code 社区的实践经验。但是本项目中的文件，仅在 Mac OS 中测试过，不代表在 Windows/Linux 可以直接使用。
 
 ---
 
